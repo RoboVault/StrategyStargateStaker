@@ -95,6 +95,7 @@ contract StrategyStargateStaker is BaseStrategy {
     uint256 public pid; // the pool ID we are staking for
     uint256 public decimals = 6; // TODO - Make configurable
     uint16 public stargateID = 1; // pool ID for adding / removing stargate LP
+    // TODO - Make configurable
     IERC20 public stargateLP =
         IERC20(0x12edeA9cd262006cC3C4E77c90d2CD2DD4b1eb97);
 
