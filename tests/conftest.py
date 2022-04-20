@@ -13,7 +13,7 @@ def rewards(accounts):
 
 @pytest.fixture
 def whale(accounts):
-    acc = accounts.at("0xe578C856933D8e1082740bf7661e379Aa2A30b26", force=True) # Geist USDC
+    acc = accounts.at("0x20dd72Ed959b6147912C2e529F0a0C651c33c9ce", force=True)
     yield acc
 
 @pytest.fixture
@@ -68,7 +68,7 @@ def Strategy(StrategyStargateStaker):
 
 @pytest.fixture
 def amount(accounts, token):
-    amount = 10_000 * 10 ** token.decimals()
+    amount = 1_000_000 * 10 ** token.decimals()
     yield amount
 
 @pytest.fixture

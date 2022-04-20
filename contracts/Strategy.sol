@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: AGPL-3.0
 // Feel free to change the license, but this is what we use
 
@@ -29,10 +28,18 @@ interface ChefLike {
         returns (uint256, uint256);
 }
 
-
 interface StargateRouter {
-    function addLiquidity(uint256 _poolId, uint256 _amountLD, address _to) external;
-    function instantRedeemLocal(uint16 _poolId, uint256 _amountLD, address _to) external; 
+    function addLiquidity(
+        uint256 _poolId,
+        uint256 _amountLD,
+        address _to
+    ) external;
+
+    function instantRedeemLocal(
+        uint16 _poolId,
+        uint256 _amountLD,
+        address _to
+    ) external;
 }
 
 interface StargagePool {
@@ -70,7 +77,7 @@ contract StrategyStargateStaker is BaseStrategy {
     address internal constant spookyRouter =
         0xF491e7B69E4244ad4002BC14e878a34207E38c29;
 
-    address internal constant stargateRouter = 
+    address internal constant stargateRouter =
         0xAf5191B0De278C7286d6C7CC6ab6BB8A73bA2Cd6;
 
     // tokens
@@ -86,8 +93,10 @@ contract StrategyStargateStaker is BaseStrategy {
         IERC20(0x04068DA6C83AFCFA0e13ba15A6696662335D5B75);
 
     uint256 public pid; // the pool ID we are staking for
-    uint16 public stargateID = 1; // pool ID for adding / removing stargate LP 
-    IERC20 public stargateLP = IERC20(0x12edeA9cd262006cC3C4E77c90d2CD2DD4b1eb97); 
+    uint256 public decimals = 6; // TODO - Make configurable
+    uint16 public stargateID = 1; // pool ID for adding / removing stargate LP
+    IERC20 public stargateLP =
+        IERC20(0x12edeA9cd262006cC3C4E77c90d2CD2DD4b1eb97);
 
     string internal stratName; // we use this for our strategy's name on cloning
     bool internal isOriginal = true;
@@ -121,7 +130,7 @@ contract StrategyStargateStaker is BaseStrategy {
     // this is called by our original strategy, as well as any clones
     function _initializeStrat(uint256 _pid, string memory _name) internal {
         // initialize variables
-        maxReportDelay = 14400; // 4 hours 
+        maxReportDelay = 14400; // 4 hours
         healthCheck = address(0xebc79550f3f3Bc3424dde30A157CE3F22b66E274); // Fantom common health check
 
         // set our strategy's name
@@ -153,12 +162,34 @@ contract StrategyStargateStaker is BaseStrategy {
         return want.balanceOf(address(this));
     }
 
-    function balanceOfStaked() public view returns (uint256) {
-        (uint256 amountStaked, ) =
-            masterchef.userInfo(pid, address(this));
+    function lpToWant(uint256 _amountLp) public view returns (uint256) {
+        return StargagePool(address(stargateLP)).amountLPtoLD(_amountLp);
+    }
 
-        uint256 stakedInMasterchef = StargagePool(address(stargateLP)).amountLPtoLD(amountStaked);
-        return stakedInMasterchef;
+    function wantToLp(uint256 _amountLp) public view returns (uint256) {
+        uint256 scale = 10**decimals;
+        uint256 lpPrice = lpToWant(scale);
+        return _amountLp.mul(scale).div(lpPrice);
+    }
+
+    function withdrawStaked(uint256 _amountWant) internal {
+        // Will revert if masterchef.withdraw if called with amount > balance
+        uint256 unstake = Math.min(wantToLp(_amountWant), balanceLpStaked());
+        masterchef.withdraw(pid, unstake);
+        StargateRouter(stargateRouter).instantRedeemLocal(
+            stargateID,
+            stargateLP.balanceOf(address(this)),
+            address(this)
+        );
+    }
+
+    function balanceLpStaked() public view returns (uint256 _lpStaked) {
+        (_lpStaked, ) = masterchef.userInfo(pid, address(this));
+    }
+
+    // Returns staked converted to want
+    function balanceOfStaked() public view returns (uint256) {
+        return lpToWant(balanceLpStaked());
     }
 
     function estimatedTotalAssets() public view override returns (uint256) {
@@ -192,7 +223,6 @@ contract StrategyStargateStaker is BaseStrategy {
 
         uint256 debt = vault.strategies(address(this)).totalDebt;
         uint256 amountToFree;
-
         uint256 stakedBalance = balanceOfStaked();
 
         if (assets >= debt) {
@@ -220,8 +250,22 @@ contract StrategyStargateStaker is BaseStrategy {
                 }
             }
         } else {
-            //serious loss should never happen but if it does lets record it accurately
+            // Serious loss should never happen but if it does lets record it accurately
+            // If entering here, it's usually because of a rounding error.
             _loss = debt - assets;
+
+            if (_debtOutstanding > 0) {
+                if (_loss >= _debtOutstanding) {
+                    _debtPayment = 0;
+                } else {
+                    _debtPayment = _debtOutstanding.sub(_loss);
+
+                    if (wantBal < _debtPayment) {
+                        liquidatePosition(_debtPayment);
+                        _debtPayment = want.balanceOf(address(this));
+                    }
+                }
+            }
         }
 
         // we're done harvesting, so reset our trigger if we used it
@@ -236,7 +280,11 @@ contract StrategyStargateStaker is BaseStrategy {
         uint256 toInvest = balanceOfWant();
         // stake only if we have something to stake
         if (toInvest > 0) {
-            StargateRouter(stargateRouter).addLiquidity(stargateID, toInvest, address(this));
+            StargateRouter(stargateRouter).addLiquidity(
+                stargateID,
+                toInvest,
+                address(this)
+            );
             masterchef.deposit(pid, stargateLP.balanceOf(address(this)));
         }
     }
@@ -248,34 +296,40 @@ contract StrategyStargateStaker is BaseStrategy {
     {
         uint256 totalAssets = want.balanceOf(address(this));
         if (_amountNeeded > totalAssets) {
-            uint256 amountToWithdraw = _amountNeeded.sub(totalAssets);
-            uint256 stakePercent = amountToWithdraw.mul(BPS_ADJ).div(balanceOfStaked());
-            (uint256 amountStaked, ) = masterchef.userInfo(pid, address(this));
-            // set thresholds to make sure we don't try to withdraw too much or too little 
-            stakePercent = Math.min(BPS_ADJ, stakePercent);
-            stakePercent = Math.max(10, stakePercent);
-            uint256 withdrawAmt = amountStaked.mul(stakePercent).div(BPS_ADJ);
-            masterchef.withdraw(pid, withdrawAmt);
-            StargateRouter(stargateRouter).instantRedeemLocal(stargateID, stargateLP.balanceOf(address(this)), address(this));
-            _liquidatedAmount = balanceOfWant();
+            uint256 amountToFree = _amountNeeded.sub(totalAssets);
+
+            uint256 deposited = balanceOfStaked();
+            if (deposited < amountToFree) {
+                amountToFree = deposited;
+            }
+            if (deposited > 0) {
+                withdrawStaked(amountToFree);
+            }
+
+            _liquidatedAmount = want.balanceOf(address(this));
         } else {
             _liquidatedAmount = _amountNeeded;
         }
     }
 
     function liquidateAllPositions() internal override returns (uint256) {
-        uint256 stakedBalance = balanceOfStaked();
-        (uint256 amountStaked, ) =
-            masterchef.userInfo(pid, address(this));
-        if (stakedBalance > 0) {
-            masterchef.withdraw(pid, amountStaked);
-            StargateRouter(stargateRouter).instantRedeemLocal(stargateID, stargateLP.balanceOf(address(this)), address(this));
+        uint256 lpStaked = balanceLpStaked();
+        if (lpStaked > 0) {
+            masterchef.withdraw(pid, lpStaked);
+        }
+
+        uint256 lpBalance = stargateLP.balanceOf(address(this));
+        if (lpBalance > 0) {
+            StargateRouter(stargateRouter).instantRedeemLocal(
+                stargateID,
+                stargateLP.balanceOf(address(this)),
+                address(this)
+            );
         }
         return balanceOfWant();
     }
 
     function prepareMigration(address _newStrategy) internal override {
-        
         liquidateAllPositions();
 
         // send our claimed emissionToken to the new strategy
@@ -288,7 +342,16 @@ contract StrategyStargateStaker is BaseStrategy {
     ///@notice Only do this if absolutely necessary; as assets will be withdrawn but rewards won't be claimed.
     function emergencyWithdraw() external onlyEmergencyAuthorized {
         masterchef.emergencyWithdraw(pid);
-        StargateRouter(stargateRouter).instantRedeemLocal(stargateID, stargateLP.balanceOf(address(this)), address(this));
+        StargateRouter(stargateRouter).instantRedeemLocal(
+            stargateID,
+            stargateLP.balanceOf(address(this)),
+            address(this)
+        );
+    }
+
+    ///@notice Only do this if absolutely necessary; as assets will be withdrawn but rewards won't be claimed.
+    function emergencyUnstake() external onlyEmergencyAuthorized {
+        masterchef.emergencyWithdraw(pid);
     }
 
     // sell from reward token to want
@@ -305,7 +368,6 @@ contract StrategyStargateStaker is BaseStrategy {
             address(this),
             block.timestamp
         );
-
     }
 
     function protectedTokens()
@@ -369,5 +431,4 @@ contract StrategyStargateStaker is BaseStrategy {
     }
 
     receive() external payable {}
-
 }
