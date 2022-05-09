@@ -14,6 +14,8 @@ def test_apr(accounts, token, vault, strategy, chain, strategist, whale, amount)
     assert token.balanceOf(vault.address) == amount
 
     # harvest
+    chain.sleep(1)
+    chain.mine(1)
     strategy.harvest()
     startingBalance = vault.totalAssets()
     for i in range(4):
@@ -56,6 +58,8 @@ def test_normal_activity(accounts, token, vault, strategy, strategist, whale, ch
     assert token.balanceOf(vault.address) == amount
 
     # harvest
+    chain.sleep(1)
+    chain.mine(1)
     strategy.harvest()
     for i in range(10):
         waitBlock = 50
@@ -153,25 +157,27 @@ def test_change_debt(gov, token, vault, strategy, whale, amount, chain):
     token.approve(vault.address, amount, {"from": whale})
     vault.deposit(amount, {"from": whale})
     vault.updateStrategyDebtRatio(strategy.address, 5_000, {"from": gov})
+    chain.sleep(1)
+    chain.mine(1)
     strategy.harvest()
 
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=1e-6) == amount / 2
 
+    vault.updateStrategyDebtRatio(strategy.address, 10_000, {"from": gov})
     chain.sleep(1)
     chain.mine(1)
-    vault.updateStrategyDebtRatio(strategy.address, 10_000, {"from": gov})
     strategy.harvest()
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=1e-6) == amount
 
+    vault.updateStrategyDebtRatio(strategy.address, 5_000, {"from": gov})
     chain.sleep(1)
     chain.mine(1)
-    vault.updateStrategyDebtRatio(strategy.address, 5_000, {"from": gov})
     strategy.harvest()
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=1e-6) == amount / 2
 
+    vault.updateStrategyDebtRatio(strategy.address, 0, {"from": gov})
     chain.sleep(1)
     chain.mine(1)
-    vault.updateStrategyDebtRatio(strategy.address, 0, {"from": gov})
     strategy.harvest()
     assert strategy.estimatedTotalAssets() == 0
 
@@ -194,6 +200,8 @@ def test_triggers(gov, vault, strategy, token, amount, whale, chain):
     token.approve(vault.address, amount, {"from": whale})
     vault.deposit(amount, {"from": whale})
     vault.updateStrategyDebtRatio(strategy.address, 5_000, {"from": gov})
+    chain.sleep(1)
+    chain.mine(1)
     strategy.harvest()
 
     assert strategy.harvestTrigger(0) == False

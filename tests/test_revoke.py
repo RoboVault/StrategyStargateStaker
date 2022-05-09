@@ -4,6 +4,8 @@ def test_revoke_strategy_from_vault(token, vault, strategy, amount, gov, whale, 
     # Deposit to the vault and harvest
     token.approve(vault.address, amount, {"from": whale})
     vault.deposit(amount, {"from": whale})
+    chain.sleep(1)
+    chain.mine(1)
     strategy.harvest()
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=1e-6) == amount
 
@@ -18,6 +20,8 @@ def test_revoke_strategy_from_strategy(token, vault, strategy, amount, gov, whal
     # Deposit to the vault and harvest
     token.approve(vault.address, amount, {"from": whale})
     vault.deposit(amount, {"from": whale})
+    chain.sleep(1)
+    chain.mine(1)
     strategy.harvest()
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=1e-6) == amount
 

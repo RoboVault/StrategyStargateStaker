@@ -116,3 +116,11 @@ def strategy(strategist, keeper, vault, token, weth, Strategy, gov, pid):
 
     vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
     yield strategy
+
+# Function scoped isolation fixture to enable xdist.
+# Snapshots the chain before each test and reverts after test completion.
+@pytest.fixture(scope="function", autouse=True)
+def shared_setup(fn_isolation, chain):
+    chain.sleep(10)
+    chain.mine(1)
+    pass
