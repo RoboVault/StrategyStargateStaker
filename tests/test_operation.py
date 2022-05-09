@@ -74,7 +74,7 @@ def test_normal_activity(accounts, token, vault, strategy, strategist, whale, ch
     genericStateOfVault(vault, token)
 
 
-def test_emergency_withdraw(token, vault, strategy, whale, gov, amount):
+def test_emergency_withdraw(token, vault, strategy, whale, gov, amount, chain):
 
     bbefore = token.balanceOf(whale)
 
@@ -84,12 +84,16 @@ def test_emergency_withdraw(token, vault, strategy, whale, gov, amount):
     assert token.balanceOf(vault.address) == amount
 
     # harvest deposit into staking contract
+    chain.sleep(1)
+    chain.mine(1)
     strategy.harvest()
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=1e-6) == amount
     strategy.emergencyWithdraw({'from': gov})
     assert pytest.approx(token.balanceOf(strategy), rel=1e-6) == amount
     
     vault.updateStrategyDebtRatio(strategy, 0, {'from': gov})
+    chain.sleep(1)
+    chain.mine(1)
     strategy.harvest()
     assert strategy.estimatedTotalAssets() == 0
     assert vault.strategies(strategy)['totalDebt'] == 0
@@ -97,7 +101,7 @@ def test_emergency_withdraw(token, vault, strategy, whale, gov, amount):
     assert vault.pricePerShare() >= 100000
 
 
-def test_emergency_exit(accounts, token, vault, strategy, strategist, whale, amount):
+def test_emergency_exit(accounts, token, vault, strategy, strategist, whale, amount, chain):
     # Deposit to the vault
     bbefore= token.balanceOf(whale)
     token.approve(vault, amount, {"from": whale})
@@ -105,11 +109,15 @@ def test_emergency_exit(accounts, token, vault, strategy, strategist, whale, amo
     assert token.balanceOf(vault.address) == amount
 
     # harvest
+    chain.sleep(1)
+    chain.mine(1)
     strategy.harvest()
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=1e-6) == amount
 
     # set emergency and exit
     strategy.setEmergencyExit()
+    chain.sleep(1)
+    chain.mine(1)
     strategy.harvest()
     assert token.balanceOf(strategy.address) < amount
 
@@ -126,12 +134,16 @@ def test_profitable_harvest(token, vault, strategy, gov, chain, whale, amount):
     assert token.balanceOf(vault.address) == amount
 
     # harvest
+    chain.sleep(1)
+    chain.mine(1)
     strategy.harvest()
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=1e-6) == amount
 
     chain.sleep(3600 * 24)
     chain.mine()
     strategy.setDoHealthCheck(False, {'from': gov})
+    chain.sleep(1)
+    chain.mine(1)
     strategy.harvest()
     assert vault.totalAssets() > amount
 
