@@ -13,7 +13,7 @@ def rewards(accounts):
 
 @pytest.fixture
 def whale(accounts):
-    acc = accounts.at("0xe578C856933D8e1082740bf7661e379Aa2A30b26", force=True) # Geist USDC
+    acc = accounts.at("0x20dd72Ed959b6147912C2e529F0a0C651c33c9ce", force=True)
     yield acc
 
 @pytest.fixture
@@ -68,7 +68,7 @@ def Strategy(StrategyStargateStaker):
 
 @pytest.fixture
 def amount(accounts, token):
-    amount = 10_000 * 10 ** token.decimals()
+    amount = 1_000_000 * 10 ** token.decimals()
     yield amount
 
 @pytest.fixture
@@ -116,3 +116,11 @@ def strategy(strategist, keeper, vault, token, weth, Strategy, gov, pid):
 
     vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
     yield strategy
+
+# Function scoped isolation fixture to enable xdist.
+# Snapshots the chain before each test and reverts after test completion.
+@pytest.fixture(scope="function", autouse=True)
+def shared_setup(fn_isolation, chain):
+    chain.sleep(10)
+    chain.mine(1)
+    pass
