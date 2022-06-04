@@ -95,6 +95,9 @@ contract StrategyStargateStaker is BaseStrategy {
     uint256 public pid; // the pool ID we are staking for
     uint256 public decimals = 6; // TODO - Make configurable
     uint16 public stargateID = 1; // pool ID for adding / removing stargate LP
+
+    uint256 public lpDust; // dust threshold for withdrawing LP 
+
     // TODO - Make configurable
     IERC20 public stargateLP =
         IERC20(0x12edeA9cd262006cC3C4E77c90d2CD2DD4b1eb97);
@@ -303,7 +306,7 @@ contract StrategyStargateStaker is BaseStrategy {
             if (deposited < amountToFree) {
                 amountToFree = deposited;
             }
-            if (deposited > 0) {
+            if (deposited > 0 && amountToFree > lpDust) {
                 withdrawStaked(amountToFree);
             }
 
@@ -430,6 +433,15 @@ contract StrategyStargateStaker is BaseStrategy {
     {
         minHarvestCredit = _minHarvestCredit;
     }
+
+    ///@notice Dust min to withdraw LP
+    function setDust(uint256 _lpDust)
+        external
+        onlyAuthorized
+    {
+        lpDust = _lpDust;
+    }
+
 
     receive() external payable {}
 }
